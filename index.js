@@ -16,7 +16,7 @@ var _currentTag = null;
 var _formatLevel = 1;
 var _options = {
     parameterName: "data",
-    functionName: function(filename, path) {
+    functionName: function (filename, path) {
         return filename;
     },
     template: {
@@ -73,10 +73,10 @@ function extractFileName(path) {
     return _options.functionName(name.split(".")[0], parts.join("/"));
 }
 
-function decodeTemplates(string, openTag, closeTag) {
+function decodeTemplates(string, openTag, closeTag, noQuote) {
     var regex = new RegExp(openTag + '(.*?)' + closeTag, 'g');
-    var prefix = true;
-    var suffix = true;
+    var prefix = !noQuote;
+    var suffix = !noQuote;
 
     var result = string.replace(regex, function (match, p1, index, string) {
         if (index !== 0)
@@ -142,17 +142,26 @@ var _handler = {
         var args = ["'" + name + "'"];
 
         if (DUTY.indexOf(name) === -1) {
-            for (var key in attribs) {
-                if (attribs.hasOwnProperty(key)) {
-                    if (args.length === 1) {
-                        args.push(null);
-                        args.push(null);
-                    }
-
-                    args.push("'" + key + "'");
-                    args.push(decodeTemplates(attribs[key], _options.helpers.open, _options.helpers.close));
-                }
+            if (attribs["$key"]) {
+                args.push(decodeTemplates(attribs["$key"], _options.helpers.open, _options.helpers.close, true));
+                delete attribs['$key'];
+            } else {
+                args.push(null);
             }
+
+            var statics = [];
+
+            Object.keys(attribs).filter(a => a.charAt(0) === '$').forEach(key => {
+                statics.push("'" + key + "'");
+                statics.push(decodeTemplates(attribs[key], _options.helpers.open, _options.helpers.close));
+            });
+
+            args.push(statics.length > 1 ? statics : null);
+
+            Object.keys(attribs).filter(a=> a.charAt(1) !== '$').forEach(key => {
+                args.push("'" + key + "'");
+                args.push(decodeTemplates(attribs[key], _options.helpers.open, _options.helpers.close));
+            });
 
             writeCommand("elementOpen", args);
         } else {
@@ -210,7 +219,7 @@ function gulpCompiler(newOptions) {
             extension = file.path.split('.');
             extension = extension[extension.length - 1];
             if (extension !== _options.ignore) {
-                parser = new htmlparser.Parser( _handler, {decodeEntities: true});
+                parser = new htmlparser.Parser(_handler, {decodeEntities: true});
 
                 //get file content as string
                 buffer = new Buffer(file.contents);
